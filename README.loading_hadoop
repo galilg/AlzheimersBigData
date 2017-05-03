@@ -1,0 +1,5 @@
+hadoop fs -mkdir -p /user/<hduser>/
+
+hadoop fs -put <datafile>  /user/<hduser>/
+
+
