@@ -25,6 +25,5 @@ if __name__ == "__main__":
 
     char_list = charCounts.collect()
     word_list = filtered.collect()
-    print("The character list is: ", char_list)
-    print("The word list is: ", word_list)
-    repr(list)[1:-1]
+    print("The character list is: {}\n".format(char_list))
+    print("The word list is: {}".format(word_list))
