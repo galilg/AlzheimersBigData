@@ -1,0 +1,31 @@
+I've imported rosmap.csv into hdfs with:
+
+hdfs dfs -put rosmap.csv /user/galil/
+
+In spark:
+
+Create a Spark Context....
+
+# Split the rosmap file by lines:
+lines = sc.textFile('rosmap.csv').flatMap(lambda x: x.split('\n'))
+
+# Gather the header line:
+header = lines.collect()[0]
+
+# Group the lines by Key: diagnosis, which is the 12th character on the line
+# We will end up with 8 groups rather than 6 because of the NA patients, and
+# the header line.
+
+groups = lines.groupBy(lambda x: x[12:13])
+
+# Clean up the two groups that can't be read as ints
+groups = groups.filter(lambda x: x[0] != 'N' and x[0] != 'I')
+
+# Filter the NCI group
+
+nci = groups.filter(lambda x: int(x[0]) == 1)
+
+# Filter the AD group
+
+ad = groups.filter(lambda x: int(x[0]) > 3 and int(x[0]) < 6)
+
