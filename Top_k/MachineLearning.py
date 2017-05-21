@@ -124,16 +124,33 @@ class MachineLearning():
         train_set_3 = sample1_genes.union(sample3_genes)
         test_set_3 = sample2_genes
 
+        impurities  = ['gini', 'entropy']
 
-        set1_testErr = self.train_and_test_samples(train_set_1, test_set_1)
-        set2_testErr = self.train_and_test_samples(train_set_2, test_set_2)
-        set3_testErr = self.train_and_test_samples(train_set_3, test_set_3)
+        for impurity in impurities:
 
-        print("Error on set 1: ", set1_testErr)
-        print("Error on set 2: ", set2_testErr)
-        print("Error on set 3: ", set3_testErr)
+            set1_testErr = self.train_and_test_samples(train_set_1,
+                                                       test_set_1, impurity)
+            set2_testErr = self.train_and_test_samples(train_set_2,
+                                                       test_set_2, impurity)
+            set3_testErr = self.train_and_test_samples(train_set_3,
+                                                       test_set_3, impurity)
 
-        import pdb; pdb.set_trace()
+            print("Error on set 1 for {} impurity: {}".format(impurity,
+                                                              set1_testErr))
+            print("Error on set 2 for {} impurity: {}".format(impurity,
+                                                              set2_testErr))
+            print("Error on set 3 for {} impurity: {}".format(impurity,
+                                                              set3_testErr))
+
+            print("Mean {} error: {}".format(impurity,
+                                                 ((float(set1_testErr)
+                                                + float(set2_testErr)
+                                                + float(set3_testErr)) / 3)))
+            #import pdb; pdb.set_trace()
+            #a  = 3
+            #b = 9
+
+        #import pdb; pdb.set_trace()
 
         #model = DecisionTree.trainClassifier(group, numClasses=2, categoricalFeaturesInfo={}, impurity='gini', maxDepth=5)
 #predictions = model.predict(group.map(lambda x: x.features))
@@ -165,17 +182,17 @@ class MachineLearning():
 #I want to check some other metrics to evaluate the performance. I am especially interested in ROC. It's easy to understand if you read about it.
 #from pyspark.mllib.evaluation import BinaryClassificationMetrics
 #metrics = BinaryClassificationMetrics(l_p)
-#print(metrics.areaUnderROC) so this AUC varies from 0.5 and 1, where 0.5 would be random guessing and 1 is a model that is 100% accurate. We want this value to be closer to 1. 0.81 is quite decent AUC value, but again it has to be tested on cross validation sample.
 
 
 
 
-    def train_and_test_samples(self, train_sample, test_sample):
+    def train_and_test_samples(self, train_sample, test_sample, impurity):
 
         model = DecisionTree.trainClassifier(train_sample,
                                                    numClasses=2,
                                                    categoricalFeaturesInfo={},
-                                                   impurity='gini',
+                                                   #impurity='gini',
+                                                   impurity=impurity,
                                                    maxDepth=5)
 
         predictions = model.predict(test_sample.map(lambda x: x.features))
