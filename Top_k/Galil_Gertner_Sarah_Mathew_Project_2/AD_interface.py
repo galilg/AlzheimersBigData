@@ -45,18 +45,14 @@ Enter Command >>> """)
         #command = input()
 
         if command == '1':
-            #rosmap_file = input("Enter name of ROSMAP file: ")
-            #gene_cluster_file = input("Enter name of gene cluster file: ")
-            rosmap_file = "rosmap.csv"
-            gene_cluster_file = "gene_cluster.csv"
+            rosmap_file = input("Enter name of ROSMAP file: ")
+            gene_cluster_file = input("Enter name of gene cluster file: ")
             start = time.time()
             top_k.find_top_k(rosmap_file, gene_cluster_file)
             top_k.print_top_k()
             end = time.time()
             print("Time: ", end - start)
             spark_run = True
-            #top_k, cluster_vals = tk.find_top_k(rosmap_file, gene_cluster_file)
-            #pprint.pprint(top_k)
 
         elif command == '2':
             if spark_run:
