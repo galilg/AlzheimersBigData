@@ -1,0 +1,15 @@
+Requirements:
+
+python 3.5 for local execution
+python 2.7 for AWS execution
+
+MLlib package
+Pyspark package
+
+To run locally:
+
+python3 AD_interface.py
+
+To run on AWS EMR:
+
+spark-submit --num-executors 3 --executor-cores 3 PY2_Top_k.py
