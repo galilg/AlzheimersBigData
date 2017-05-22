@@ -4,6 +4,7 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
+from pyspark.mllib.tree import RandomForest, RandomForestModel
 
 #---- Classes -----------------------------------------------------------------
 
@@ -14,8 +15,12 @@ class MachineLearning():
         self.nci_reduced = nci_reduced
         self.sc = sc
         self.labeled_genes = None
-        self.labeled_genes_and_life_stats = None
+        self.labeled_genes_and_age = None
 
+        self.mean_gini_error = None
+        self.mean_entropy_error = None
+        self.mean_rf_error = None
+        self.mean_rf_error_whole_data = None
 
     def set_labeled_points_data(self):
         #import pdb; pdb.set_trace()
@@ -45,18 +50,14 @@ class MachineLearning():
         nci_gene_vals_only = nci_no_cluster_ids.map(lambda x: x[1])
         #import pdb; pdb.set_trace()
         # Get rdds with both patient stats and gene vals for each control group
-        ad_gene_and_life_stats = ad_no_cluster_ids \
+        ad_genes_and_age = ad_no_cluster_ids \
                                    .map(lambda x:
-                                        ([x[0][1][0],
-                                          x[0][1][1],
-                                          x[0][1][2]], x[1])) \
+                                        ([x[0][1][0]], x[1])) \
                                    .map(lambda x: x[0] + x[1])
 
-        nci_gene_and_life_stats = nci_no_cluster_ids \
+        nci_genes_and_age = nci_no_cluster_ids \
                                     .map(lambda x:
-                                        ([x[0][1][0],
-                                          x[0][1][1],
-                                          x[0][1][2]], x[1])) \
+                                        ([x[0][1][0]], x[1])) \
                                     .map(lambda x: x[0] + x[1])
 
         # Transform rdds to Labeled Points for MLlib
@@ -70,12 +71,12 @@ class MachineLearning():
                                                LabeledPoint(0, features))
                                    # NCI gets a label of 0
 
-        ad_gene_and_life_stats_labeled = ad_gene_and_life_stats \
+        ad_genes_and_age_labeled = ad_genes_and_age \
                                         .map(lambda features:
                                                     LabeledPoint(1, features))
                                    # AD gets a label of 1
 
-        nci_gene_and_life_stats_labeled = nci_gene_and_life_stats \
+        nci_genes_and_age_labeled = nci_genes_and_age \
                                         .map(lambda features:
                                                     LabeledPoint(0, features))
                                    # NCI gets a label of 0
@@ -85,23 +86,26 @@ class MachineLearning():
         all_groups_gene_vals_only = ad_gene_vals_only_labeled \
                                    .union(nci_gene_vals_only_labeled)
 
-        all_groups_gene_and_life_stats = ad_gene_and_life_stats_labeled \
-                                        .union(nci_gene_and_life_stats_labeled)
+        all_groups_genes_and_age = ad_genes_and_age_labeled \
+                                        .union(nci_genes_and_age_labeled)
 
+        #import pdb; pdb.set_trace()
 
         self.labeled_genes = all_groups_gene_vals_only
-        self.labeled_genes_and_life_stats = all_groups_gene_and_life_stats
+        self.labeled_genes_and_age = all_groups_genes_and_age
 
     # Data name is a string indicating which model is being built so that
     # the model can be saved with the appropriate name.
-    def build_model(self):
+    def build_model(self, model_type, number_of_trees):
 
-        #if (model_type == 'genes'):
-        #    group = self.labeled_genes
-        #if (model_type == 'life_stats'):
-        #    group = self.labeled_genes_and_life_stats
+        if (model_type == 'genes'):
+            group = self.labeled_genes
+        if (model_type == 'life_stats'):
+            group = self.labeled_genes_and_age
 
-        group = self.labeled_genes
+        ntrees = number_of_trees
+
+        #group = self.labeled_genes
 
         # Create a decision tree for both Labeled point groups
         # With the life stats and without
@@ -128,11 +132,11 @@ class MachineLearning():
 
         for impurity in impurities:
 
-            set1_testErr = self.train_and_test_samples(train_set_1,
+            set1_testErr = self.decision_tree(train_set_1,
                                                        test_set_1, impurity)
-            set2_testErr = self.train_and_test_samples(train_set_2,
+            set2_testErr = self.decision_tree(train_set_2,
                                                        test_set_2, impurity)
-            set3_testErr = self.train_and_test_samples(train_set_3,
+            set3_testErr = self.decision_tree(train_set_3,
                                                        test_set_3, impurity)
 
             print("Error on set 1 for {} impurity: {}".format(impurity,
@@ -141,60 +145,87 @@ class MachineLearning():
                                                               set2_testErr))
             print("Error on set 3 for {} impurity: {}".format(impurity,
                                                               set3_testErr))
+            if impurity == 'gini':
+                self.mean_gini_error = ((float(set1_testErr)
+                                       + float(set2_testErr)
+                                       + float(set3_testErr)) / 3)
+
+            if impurity == 'entropy':
+                self.mean_entropy_error = ((float(set1_testErr)
+                                          + float(set2_testErr)
+                                          + float(set3_testErr)) / 3)
 
             print("Mean {} error: {}".format(impurity,
                                                  ((float(set1_testErr)
                                                 + float(set2_testErr)
                                                 + float(set3_testErr)) / 3)))
             #import pdb; pdb.set_trace()
-            #a  = 3
-            #b = 9
+
+        set_1_rf_error = self.random_forest(train_set_1,
+                                            test_set_1,
+                                            'entropy',
+                                            ntrees)
+
+        set_2_rf_error = self.random_forest(train_set_2,
+                                            test_set_2,
+                                            'entropy',
+                                            ntrees)
+
+        set_3_rf_error =  self.random_forest(train_set_3,
+                                             test_set_3,
+                                             'entropy',
+                                             ntrees)
+
+        print("Error on set 1 for random forest: ", set_1_rf_error)
+        print("Error on set 2 for random forest: ", set_2_rf_error)
+        print("Error on set 3 for random forest: ", set_3_rf_error)
+
+        self.mean_rf_error = (                  ((float(set_1_rf_error)
+                                                + float(set_2_rf_error)
+                                                + float(set_3_rf_error)) / 3 ))
 
         #import pdb; pdb.set_trace()
 
-        #model = DecisionTree.trainClassifier(group, numClasses=2, categoricalFeaturesInfo={}, impurity='gini', maxDepth=5)
-#predictions = model.predict(group.map(lambda x: x.features))
-#l_p=group.map(lambda lp: lp.label).zip(predictions)
-#overallErr=l_p.filter(lambda v_p: v_p[0] != v_p[1]).count()/float(group.count())
-#print('Error = '+ str(overallErr)) You are going to see that the error is 0.22 which is much lower than what we see in cross validation. While it's expected for overall error to be lower relative to CV errors, in some samples it's 2 times less which indicated that our current model isn't that good.
-# print(model.toDebugString())
 
-### now I want to see how the model performs with impurity='entropy'
-#model = DecisionTree.trainClassifier(group, numClasses=2, categoricalFeaturesInfo={}, impurity='entropy', maxDepth=5) there are fewer nodes in this model. Giniis known for overfitting.
-#predictions = model.predict(group.map(lambda x: x.features))
-#l_p=group.map(lambda lp: lp.label).zip(predictions)
-#overallErr=l_p.filter(lambda v_p: v_p[0] != v_p[1]).count()/float(group.count())
-#print('Error = '+ str(overallErr)) Error is higher 0.25
-# You'll need to add part that does cross validation. Record the values of TestError for each sample and compare them:
-# 1) with the overall Error
-# 2) with the model that uses impurity gini
-#from pyspark.mllib.tree import RandomForest, RandomForestModel
-#rf = RandomForest.trainClassifier(group, numClasses=2, categoricalFeaturesInfo={}, numTrees=50, featureSubsetStrategy="auto", impurity='gini', maxDepth=5) I started with 50 trees,  the higher the number of trees, the lower the variance which ultimately leads to higher accuracy. featureSubsetStrategy asks us to set the number of features to use for splitting at each tree node. I have no preference, so I set it to default.
-#predictions=rf.predict(group.map(lambda x: x.features))
-#l_p=group.map(lambda lp: lp.label).zip(predictions)
-#overallErr=l_p.filter(lambda v_p: v_p[0] != v_p[1]).count()/float(group.count())
-#print(overallErr)
-# let's try 100 trees
-#rf = RandomForest.trainClassifier(group, numClasses=2, categoricalFeaturesInfo={}, numTrees=100, featureSubsetStrategy="auto", impurity='gini', maxDepth=5)
-#predictions=rf.predict(group.map(lambda x: x.features))
-#l_p=group.map(lambda lp: lp.label).zip(predictions)
-#overallErr=l_p.filter(lambda v_p: v_p[0] != v_p[1]).count()/float(group.count())
-#I want to check some other metrics to evaluate the performance. I am especially interested in ROC. It's easy to understand if you read about it.
-#from pyspark.mllib.evaluation import BinaryClassificationMetrics
-#metrics = BinaryClassificationMetrics(l_p)
+    def random_forest(self, train_sample, test_sample, impurity, num_trees):
+
+        #import pdb; pdb.set_trace()
+        rf_model = RandomForest.trainClassifier(train_sample,
+                                          numClasses=2,
+                                          categoricalFeaturesInfo={},
+                                          numTrees=int(num_trees),
+                                          featureSubsetStrategy="auto",
+                                          impurity=impurity,
+                                          maxDepth=5,
+                                          seed=123)
+
+        # Cross-validate on the model
+
+        return self.cross_validate(rf_model, test_sample)
+
+
+        # This is the cross validation where we predict the results of the
+        # test sample based on the rf built on the training sample.
+
+
+        #predictions = rf.predict(test_sample.map(lambda x: x.features))
+        #labels_and_predictions = test_sample.map(lambda lp:
 
 
 
+    def decision_tree(self, train_sample, test_sample, impurity):
 
-    def train_and_test_samples(self, train_sample, test_sample, impurity):
-
-        model = DecisionTree.trainClassifier(train_sample,
+        dt_model = DecisionTree.trainClassifier(train_sample,
                                                    numClasses=2,
                                                    categoricalFeaturesInfo={},
                                                    #impurity='gini',
                                                    impurity=impurity,
                                                    maxDepth=5)
 
+        return self.cross_validate(dt_model, test_sample)
+
+
+    def cross_validate(self, model, test_sample):
         predictions = model.predict(test_sample.map(lambda x: x.features))
         labelsAndPredictions = test_sample.map(lambda lp: lp.label) \
                                          .zip(predictions)
@@ -251,8 +282,13 @@ class MachineLearning():
         return testErr
 
 
-
-
+    def print_all_data(self):
+        print("Mean gini impurity error: ", self.mean_gini_error)
+        print("Mean entropy impurity error: ", self.mean_entropy_error)
+        print("Mean random forest test sample error: ",
+                                    self.mean_rf_error)
+        #print("Mean random forest whole data error: ",
+                                    #self.mean_rf_error_whole_data)
 
 
 
